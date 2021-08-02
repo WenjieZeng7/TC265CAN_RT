@@ -24,18 +24,20 @@
  * CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS 
  * IN THE SOFTWARE.
  *********************************************************************************************************************/
+#include "Platform_Types.h"
 #include "Ifx_Types.h"
 #include "IfxCpu.h"
 #include "IfxScuWdt.h"
 
-#include "SysSe/Bsp/Bsp.h"   //包含时钟相关，延迟函数在此实现
+#include "SysSe/Bsp/Bsp.h"   //???????????????????????
 #include "Port/Io/IfxPort_Io.h"
-#include "Multican/Can/IfxMultican_Can.h"       //包含CAN控制API
+#include "Multican/Can/IfxMultican_Can.h"       //????CAN????API
 #include "Flash_Programming.h"
+
 
 IfxCpu_syncEvent g_cpuSyncEvent = 0;
 
-//定义CAN模块、节点、MessageObject：
+//????CAN??顢???MessageObject??
 // CAN handle
 IfxMultican_Can can;
 // Nodes handles
@@ -47,7 +49,7 @@ IfxMultican_Can_MsgObj canRcvMsgObj2;
 
 void CAN_SendSingle(uint32 id, uint32 high, uint32 low);
 
-//定义中断等级和中断函数 报文发送完成后进入中断 翻转LED电平
+//?????ж??????ж???? ???????????????ж? ???LED???
 #define ISR_PRIORITY_CAN_RX         1                           /* Define the CAN RX interrupt priority              */
 #define ISR_PRIORITY_CAN_TX         2                           /* Define the CAN TX interrupt priority              */
 #define ISR_PRIORITY_CAN_RX_2       3                           /* Define the CAN RX interrupt priority              */
@@ -59,7 +61,7 @@ IFX_INTERRUPT(canIsrTxHandler, 0, ISR_PRIORITY_CAN_TX);
 IFX_INTERRUPT(canIsrRxHandler, 0, ISR_PRIORITY_CAN_RX);
 IFX_INTERRUPT(canIsrRxHandler_2, 0, ISR_PRIORITY_CAN_RX_2);
 
-//每个节点对应的ISO 11992的地址
+//??????????ISO 11992????
 
 
 #define MEM(address)                *((uint32 *)(address))      /* Macro to simplify the access to a memory address */
@@ -69,25 +71,25 @@ IFX_INTERRUPT(canIsrRxHandler_2, 0, ISR_PRIORITY_CAN_RX_2);
 void canIsrRxHandler_2(void)
 {
     IfxMultican_Message txMsg;
-    IfxMultican_Can_MsgObj_readMessage(&canRcvMsgObj2,&txMsg);  //从MO中提取数据
+    IfxMultican_Can_MsgObj_readMessage(&canRcvMsgObj2,&txMsg);  //??MO?????????
     int ids;
-    if(txMsg.id==0x12345678)//已测试可行
+    if(txMsg.id==0x12345678)//????????
     {
-//        id1=txMsg.data[0] & 0xFF; //取最低位的8bit
-//        id2=txMsg.data[0]>>8 & 0xFF;  //取倒数第9位到第16位
+//        id1=txMsg.data[0] & 0xFF; //????λ??8bit
+//        id2=txMsg.data[0]>>8 & 0xFF;  //???????9λ????16λ
 //        if(id1==0x78 && id2==0x56) IfxPort_togglePin(&MODULE_P33, 9);
 
 //        ids=txMsg.data[0] & 0xFFFFFF;
 //        if(ids==0x345678) IfxPort_togglePin(&MODULE_P33, 9);
 
-        //3个节点对应的ISO 11992的地址，按牵引车-挂车1-挂车2的顺序，写在数据域的低6Bytes。
-        //如现在的情况下，报文ID为0x12345678的数据域内容为0x0020c8c0，0x00000000
+        //3?????????ISO 11992?????????????-???1-???2?????д??????????6Bytes??
+        //?????????????????ID?0x12345678?????????????0x0020c8c0??0x00000000
         ids=txMsg.data[0];
         writeDataFlash(ids);
     }
     int getid;
     getid = MEM(DFLASH_STARTING_ADDRESS);
-    //以下测试通过
+    //??????????
 //    if(getid==0x0020c8c0)
 //    {
 //        IfxPort_togglePin(&MODULE_P33, 9);
@@ -106,22 +108,22 @@ void canIsrRxHandler_2(void)
 
 #define WAIT_TIME 500   /* Wait time constant in milliseconds   */
 
-//发送中断处理函数 翻转LED1
+//?????ж???????? ???LED1
 void canIsrTxHandler(void)
 {
     IfxPort_togglePin(&MODULE_P33, 8);
 }
 
-//接收中断处理函数 先翻转LED2
+//?????ж???????? ????LED2
 void canIsrRxHandler(void)
 {
     IfxPort_togglePin(&MODULE_P33, 9);
-    IfxMultican_Status readStatus;      //读CAN状态位
+    IfxMultican_Status readStatus;      //??CAN??λ
 
-    IfxMultican_Message rxMsg;          //定义数据帧格式 含ID 数据长度 数据
+    IfxMultican_Message rxMsg;          //???????????? ??ID ??????? ????
 
     /* Read the received CAN message and store the status of the operation */
-    readStatus = IfxMultican_Can_MsgObj_readMessage(&canRcvMsgObj, &rxMsg);     //读取收到的CAN消息并存储操作状态
+    readStatus = IfxMultican_Can_MsgObj_readMessage(&canRcvMsgObj, &rxMsg);     //????????CAN??????洢??????
 
     /* If no new data has been received, report an error */
     if( !( readStatus & IfxMultican_Status_newData ) )
@@ -139,7 +141,7 @@ void canIsrRxHandler(void)
         }
     }
 
-    CAN_SendSingle(0x12345200, rxMsg.data[0], rxMsg.data[1]);        //将接收到的数据赋给ID为0x12345200的数据帧并发送
+    CAN_SendSingle(0x12345200, rxMsg.data[0], rxMsg.data[1]);        //????????????????ID?0x12345200?????????????
 
 }
 
@@ -150,8 +152,8 @@ void CanApp_init(void)
     IfxMultican_Can_initModuleConfig(&canConfig, &MODULE_CAN);
     // initialize interrupt priority
     canConfig.nodePointer[TX_INTERRUPT_SRC_ID].priority = ISR_PRIORITY_CAN_TX;
-    canConfig.nodePointer[RX_INTERRUPT_SRC_ID].priority = ISR_PRIORITY_CAN_RX;      //定义中断等级
-    canConfig.nodePointer[RX_INTERRUPT_SRC_ID_2].priority = ISR_PRIORITY_CAN_RX_2;      //定义中断等级
+    canConfig.nodePointer[RX_INTERRUPT_SRC_ID].priority = ISR_PRIORITY_CAN_RX;      //?????ж???
+    canConfig.nodePointer[RX_INTERRUPT_SRC_ID_2].priority = ISR_PRIORITY_CAN_RX_2;      //?????ж???
     // initialize module
     IfxMultican_Can_initModule(&can, &canConfig);
 
@@ -160,7 +162,7 @@ void CanApp_init(void)
     IfxMultican_Can_Node_initConfig(&canNodeConfig, &can);
     canNodeConfig.baudrate = 125000; //
     canNodeConfig.nodeId = IfxMultican_NodeId_0;
-    canNodeConfig.rxPin = &IfxMultican_RXD0B_P20_7_IN;      //初始化管脚
+    canNodeConfig.rxPin = &IfxMultican_RXD0B_P20_7_IN;      //????????
     canNodeConfig.txPin = &IfxMultican_TXD0_P20_8_OUT;
     IfxMultican_Can_Node_init(&canSrcNode, &canNodeConfig);
 
@@ -172,40 +174,40 @@ void CanApp_init(void)
     canMsgObjConfig.frame = IfxMultican_Frame_transmit;
     canMsgObjConfig.control.messageLen = IfxMultican_DataLengthCode_8;
     canMsgObjConfig.control.extendedFrame = TRUE;
-    canMsgObjConfig.txInterrupt.enabled = TRUE;     //使能发送中断
-    canMsgObjConfig.txInterrupt.srcId = TX_INTERRUPT_SRC_ID;    //定义中断源
+    canMsgObjConfig.txInterrupt.enabled = TRUE;     //???????ж?
+    canMsgObjConfig.txInterrupt.srcId = TX_INTERRUPT_SRC_ID;    //?????ж??
     // initialize receive message object
     IfxMultican_Can_MsgObj_init(&canSrcMsgObj, &canMsgObjConfig);
 
     IfxMultican_Can_MsgObj_initConfig(&canMsgObjConfig, &canSrcNode);
     canMsgObjConfig.msgObjId = 1;
-    canMsgObjConfig.messageId = 0x12345100;      //定义触发中断的ID
+    canMsgObjConfig.messageId = 0x12345100;      //???崥???ж??ID
     canMsgObjConfig.acceptanceMask = 0xFFFFFFFF;
-    //canMsgObjConfig.acceptanceMask = 0x7FFFFFFFUL;  //指定接收掩码。这是滤波了嘛？
+    //canMsgObjConfig.acceptanceMask = 0x7FFFFFFFUL;  //??????????????????????
     canMsgObjConfig.frame = IfxMultican_Frame_receive;
     canMsgObjConfig.control.messageLen = IfxMultican_DataLengthCode_8;
     canMsgObjConfig.control.extendedFrame = TRUE;
-    canMsgObjConfig.rxInterrupt.enabled = TRUE;     //使能接收中断
-    canMsgObjConfig.rxInterrupt.srcId = RX_INTERRUPT_SRC_ID;    //定义中断源
+    canMsgObjConfig.rxInterrupt.enabled = TRUE;     //???????ж?
+    canMsgObjConfig.rxInterrupt.srcId = RX_INTERRUPT_SRC_ID;    //?????ж??
     // initialize message object
     IfxMultican_Can_MsgObj_init(&canRcvMsgObj, &canMsgObjConfig);
 
-    //配置节点ID使用的MO
+    //??????ID????MO
     IfxMultican_Can_MsgObj_initConfig(&canMsgObjConfig, &canSrcNode);
     canMsgObjConfig.msgObjId = 2;
-    canMsgObjConfig.messageId = 0x12345678;      //定义触发中断的ID
+    canMsgObjConfig.messageId = 0x12345678;      //???崥???ж??ID
     canMsgObjConfig.acceptanceMask = 0xFFFFFFFF;
-    //canMsgObjConfig.acceptanceMask = 0x7FFFFFFFUL;  //指定接收掩码。这是滤波了嘛？
+    //canMsgObjConfig.acceptanceMask = 0x7FFFFFFFUL;  //??????????????????????
     canMsgObjConfig.frame = IfxMultican_Frame_receive;
     canMsgObjConfig.control.messageLen = IfxMultican_DataLengthCode_8;
     canMsgObjConfig.control.extendedFrame = TRUE;
-    canMsgObjConfig.rxInterrupt.enabled = TRUE;     //使能接收中断
-    canMsgObjConfig.rxInterrupt.srcId = RX_INTERRUPT_SRC_ID_2;    //定义中断源
+    canMsgObjConfig.rxInterrupt.enabled = TRUE;     //???????ж?
+    canMsgObjConfig.rxInterrupt.srcId = RX_INTERRUPT_SRC_ID_2;    //?????ж??
     // initialize message object
     IfxMultican_Can_MsgObj_init(&canRcvMsgObj2, &canMsgObjConfig);
 }
 
-//CAN发送函数
+//CAN???????
 void CAN_SendSingle(uint32 id, uint32 high, uint32 low)
 {
     // Initialize the message structure
@@ -217,8 +219,45 @@ void CAN_SendSingle(uint32 id, uint32 high, uint32 low)
 
 }
 
+/*global varialbe related to remotelock controller */
+struct AuthInfo {
+    uint64 indentification;
+    uint64 startTimestamp;
+    uint64 endTime;
+};
+
+struct BackEndInfo {
+    struct AuthInfo authInfo[10];
+    int remoteLockControl;
+};
+
+struct UploadMessage {
+    uint64 canRoute1;
+    uint64 canRoute2;
+    uint32 canID1;
+    uint32 canID2;
+    int lockState;
+    int send;
+} uploadMessage;
+
+/*
+@currentTime variable address passed in, used to store the current time;
+@return 0 means success, 1 means failure
+*/
+int GetCurrentTime(uint64* currentTime)
+{
+
+}
+
 int core0_main(void)
 {
+    struct AuthInfo authInfo[10];
+    struct BackEndInfo backEndInfo;
+    uint64 ICCode;
+    uint64 currentTime;
+    int LockStatus;
+    int LockControl;
+    int ret;
     IfxCpu_enableInterrupts();
     
     /* !!WATCHDOG0 AND SAFETY WATCHDOG ARE DISABLED HERE!!
@@ -232,36 +271,39 @@ int core0_main(void)
     IfxCpu_waitEvent(&g_cpuSyncEvent, 1);
 
     initTime();
+
+    //LED
     IfxPort_setPinMode(&MODULE_P33, 8, IfxPort_Mode_outputPushPullGeneral);
-
     IfxPort_setPinMode(&MODULE_P33, 9, IfxPort_Mode_outputPushPullGeneral);
-
     IfxPort_setPinHigh(&MODULE_P33, 8);
     IfxPort_setPinLow(&MODULE_P33, 9);
 
 
     CanApp_init();
+
+    /*can usart rte initialization, read from the flash to get the AuthInfo structure*/
+
+
+
+
+    
     while(1)
     {
-       CAN_SendSingle(0x01234567,0,1);   //低位 高位
-//
-       waitTime(IfxStm_getTicksFromMilliseconds(BSP_DEFAULT_TIMER, WAIT_TIME));    /* Wait 500 milliseconds            */
-       IfxPort_togglePin(&MODULE_P33, 8);
-//       int  i=0;
-//       while(i<100000) i++;
-//       i=0;
-
-       /*CAN_SendSingle(0x200,0xffffffff,1);   //低位 高位
-       int  j=0;
-       while(j<100000000) j++;
-       j=0;*/
-
-       /*延时翻转电平
-        * int  i=0;
-       while(i<100000000) i++;
-       i=0;
-       IfxPort_togglePin(&MODULE_P33, 8);*/
-
+//        CAN_SendSingle(0x01234567,0x5678,0x1234);   //低位 高位
+// //
+//        waitTime(IfxStm_getTicksFromMilliseconds(BSP_DEFAULT_TIMER, WAIT_TIME));    /* Wait 500 milliseconds            */
+//        IfxPort_togglePin(&MODULE_P33, 8);
+    /*1. get the current time zeng*/
+    ret = GetCurrentTime(&currentTime);
+    if(ret)
+    {
+        while(1);
+    }
+    /*2. authenticate if the driver can use the car to determine the desiring lock state*/
+    /*3. send can message to the electric control module that indicate whether the lock should be open or on*/ 
+    /*4. read usart port for message from the 4G module, fill in the struct backEndInfo zeng*/
+    /*5. send the struct UploadMessage to the cloud according to the send value */
+    /*6. compare AuthInfo and BackEndInfo, update AuthInfo and dflash if they are not equal*/
     }
     return (1);
 }
