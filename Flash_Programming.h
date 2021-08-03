@@ -27,7 +27,7 @@
 
 #ifndef FLASH_PROGRAMMING_H_
 #define FLASH_PROGRAMMING_H_
-
+#include "remoteLock.h"
 /*********************************************************************************************************************/
 /*------------------------------------------------Function Prototypes------------------------------------------------*/
 /*********************************************************************************************************************/
@@ -36,5 +36,7 @@ void writeProgramFlash(void);   /* Function that flashes the Program Flash memor
 void writeDataFlash(uint32 ids);      /* Function that flashes the Data Flash memory                                      */
 void verifyProgramFlash(void);  /* Function that verifies the data written in the Program Flash memory              */
 void verifyDataFlash(void);     /* Function that verifies the data written in the Data Flash memory                 */
-
+void eraseDflash(void);
+void writeAuthInfo(struct AuthInfo* pAuthInfo);
+void readAuthInfo(struct AuthInfo* pAuthInfo);
 #endif /* FLASH_PROGRAMMING_H_ */

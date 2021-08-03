@@ -24,18 +24,21 @@
  * CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS 
  * IN THE SOFTWARE.
  *********************************************************************************************************************/
+#include "remoteLock.h"
+#include "Platform_Types.h"
 #include "Ifx_Types.h"
 #include "IfxCpu.h"
 #include "IfxScuWdt.h"
 
-#include "SysSe/Bsp/Bsp.h"   //°üº¬Ê±ÖÓÏà¹Ø£¬ÑÓ³Ùº¯ÊıÔÚ´ËÊµÏÖ
+#include "SysSe/Bsp/Bsp.h"   
 #include "Port/Io/IfxPort_Io.h"
-#include "Multican/Can/IfxMultican_Can.h"       //°üº¬CAN¿ØÖÆAPI
+#include "Multican/Can/IfxMultican_Can.h"       
 #include "Flash_Programming.h"
+
 
 IfxCpu_syncEvent g_cpuSyncEvent = 0;
 
-//¶¨ÒåCANÄ£¿é¡¢½Úµã¡¢MessageObject£º
+//????CAN??Ã®ï¿½?????MessageObject??
 // CAN handle
 IfxMultican_Can can;
 // Nodes handles
@@ -47,7 +50,7 @@ IfxMultican_Can_MsgObj canRcvMsgObj2;
 
 void CAN_SendSingle(uint32 id, uint32 high, uint32 low);
 
-//¶¨ÒåÖĞ¶ÏµÈ¼¶ºÍÖĞ¶Ïº¯Êı ±¨ÎÄ·¢ËÍÍê³Éºó½øÈëÖĞ¶Ï ·­×ªLEDµçÆ½
+
 #define ISR_PRIORITY_CAN_RX         1                           /* Define the CAN RX interrupt priority              */
 #define ISR_PRIORITY_CAN_TX         2                           /* Define the CAN TX interrupt priority              */
 #define ISR_PRIORITY_CAN_RX_2       3                           /* Define the CAN RX interrupt priority              */
@@ -59,87 +62,88 @@ IFX_INTERRUPT(canIsrTxHandler, 0, ISR_PRIORITY_CAN_TX);
 IFX_INTERRUPT(canIsrRxHandler, 0, ISR_PRIORITY_CAN_RX);
 IFX_INTERRUPT(canIsrRxHandler_2, 0, ISR_PRIORITY_CAN_RX_2);
 
-//Ã¿¸ö½Úµã¶ÔÓ¦µÄISO 11992µÄµØÖ·
-
-
 #define MEM(address)                *((uint32 *)(address))      /* Macro to simplify the access to a memory address */
 #define DFLASH_STARTING_ADDRESS     0xAF000000                  /* Address of the DFLASH where the data is written  */
-
-
+struct UploadMessage uploadMessage;
+uint64 ICCode;
 void canIsrRxHandler_2(void)
 {
-    IfxMultican_Message txMsg;
-    IfxMultican_Can_MsgObj_readMessage(&canRcvMsgObj2,&txMsg);  //´ÓMOÖĞÌáÈ¡Êı¾İ
-    int ids;
-    if(txMsg.id==0x12345678)//ÒÑ²âÊÔ¿ÉĞĞ
+    IfxPort_togglePin(&MODULE_P33, 9);
+    IfxMultican_Status readStatus;
+    IfxMultican_Message rxMsg; 
+
+    /* Read the received CAN message and store the status of the operation */
+    readStatus = IfxMultican_Can_MsgObj_readMessage(&canRcvMsgObj, &rxMsg); 
+    
+    if (rxMsg.id == 0 /*ICCode*/)
     {
-//        id1=txMsg.data[0] & 0xFF; //È¡×îµÍÎ»µÄ8bit
-//        id2=txMsg.data[0]>>8 & 0xFF;  //È¡µ¹ÊıµÚ9Î»µ½µÚ16Î»
-//        if(id1==0x78 && id2==0x56) IfxPort_togglePin(&MODULE_P33, 9);
-
-//        ids=txMsg.data[0] & 0xFFFFFF;
-//        if(ids==0x345678) IfxPort_togglePin(&MODULE_P33, 9);
-
-        //3¸ö½Úµã¶ÔÓ¦µÄISO 11992µÄµØÖ·£¬°´Ç£Òı³µ-¹Ò³µ1-¹Ò³µ2µÄË³Ğò£¬Ğ´ÔÚÊı¾İÓòµÄµÍ6Bytes¡£
-        //ÈçÏÖÔÚµÄÇé¿öÏÂ£¬±¨ÎÄIDÎª0x12345678µÄÊı¾İÓòÄÚÈİÎª0x0020c8c0£¬0x00000000
-        ids=txMsg.data[0];
-        writeDataFlash(ids);
+        ICCode = rxMsg.data[1];
+        ICCode = (ICCode << 32) + rxMsg.data[0];
     }
-    int getid;
-    getid = MEM(DFLASH_STARTING_ADDRESS);
-    //ÒÔÏÂ²âÊÔÍ¨¹ı
-//    if(getid==0x0020c8c0)
-//    {
-//        IfxPort_togglePin(&MODULE_P33, 9);
-//    }
-//    else
-//    {
-//        IfxPort_togglePin(&MODULE_P33, 8);
-//    }
-    int id1,id2,id3;
-    id3 = getid & 0xFF;
-    id2 = getid>>8 & 0xFF;
-    id1 = getid>>16 & 0xFF;
-    if(id1 == 0x20 && id2 == 0xc8 && id3 == 0xc0) IfxPort_togglePin(&MODULE_P33, 9);
+    else if (rxMsg.id == 1 /*Can Route 1*/)
+    {
+        uploadMessage.send = uploadMessage.send | 0x01;
+        uploadMessage.canRoute1 = rxMsg.data[1];
+        uploadMessage.canRoute1 = (uploadMessage.canRoute1 << 32) + rxMsg.data[0];
+        uploadMessage.canID1 = 1;
+    }
+    else if (rxMsg.id == 2 /*Can Route 2*/)
+    {
+        uploadMessage.send = uploadMessage.send | 0x02;
+        uploadMessage.canRoute2 = rxMsg.data[1];
+        uploadMessage.canRoute2 = (uploadMessage.canRoute1 << 32) + rxMsg.data[0];
+        uploadMessage.canID2 = 2;
+    }
+    else if (rxMsg.id == 3 /*Lock state*/)
+    {
+        uploadMessage.send = uploadMessage.send | 0x04;
+        uploadMessage.lockState = rxMsg.data[0];
+    }
+    CAN_SendSingle(0x12345200, rxMsg.data[0], rxMsg.data[1]); 
 }
-
 
 #define WAIT_TIME 500   /* Wait time constant in milliseconds   */
 
-//·¢ËÍÖĞ¶Ï´¦Àíº¯Êı ·­×ªLED1
+//?????Â§Ã˜???????? ???LED1
 void canIsrTxHandler(void)
 {
     IfxPort_togglePin(&MODULE_P33, 8);
 }
 
-//½ÓÊÕÖĞ¶Ï´¦Àíº¯Êı ÏÈ·­×ªLED2
+//?????Â§Ã˜???????? ????LED2
 void canIsrRxHandler(void)
 {
     IfxPort_togglePin(&MODULE_P33, 9);
-    IfxMultican_Status readStatus;      //¶ÁCAN×´Ì¬Î»
-
-    IfxMultican_Message rxMsg;          //¶¨ÒåÊı¾İÖ¡¸ñÊ½ º¬ID Êı¾İ³¤¶È Êı¾İ
-
+    IfxMultican_Status readStatus;      
+    IfxMultican_Message rxMsg;          
     /* Read the received CAN message and store the status of the operation */
-    readStatus = IfxMultican_Can_MsgObj_readMessage(&canRcvMsgObj, &rxMsg);     //¶ÁÈ¡ÊÕµ½µÄCANÏûÏ¢²¢´æ´¢²Ù×÷×´Ì¬
+    readStatus = IfxMultican_Can_MsgObj_readMessage(&canRcvMsgObj, &rxMsg);     
 
-    /* If no new data has been received, report an error */
-    if( !( readStatus & IfxMultican_Status_newData ) )
+    
+    if(rxMsg.id == 0/*ICCode*/)
     {
-        while(1)
-        {
-        }
-    }
-
-    /* If new data has been received but with one message lost, report an error */
-    if( readStatus == IfxMultican_Status_newDataButOneLost )
+        ICCode = rxMsg.data[1];
+        ICCode = (ICCode << 32) + rxMsg.data[0];
+    }else if(rxMsg.id == 1/*Can Route 1*/)
     {
-        while(1)
-        {
-        }
+        uploadMessage.send = uploadMessage.send | 0x01;
+        uploadMessage.canRoute1 = rxMsg.data[1];
+        uploadMessage.canRoute1 = (uploadMessage.canRoute1 << 32) + rxMsg.data[0];
+        uploadMessage.canID1 = 1;
     }
-
-    CAN_SendSingle(0x12345200, rxMsg.data[0], rxMsg.data[1]);        //½«½ÓÊÕµ½µÄÊı¾İ¸³¸øIDÎª0x12345200µÄÊı¾İÖ¡²¢·¢ËÍ
+    else if(rxMsg.id == 2/*Can Route 2*/)
+    {
+        uploadMessage.send = uploadMessage.send | 0x02;
+        uploadMessage.canRoute2 = rxMsg.data[1];
+        uploadMessage.canRoute2 = (uploadMessage.canRoute1 << 32) + rxMsg.data[0];
+        uploadMessage.canID2 = 2;
+    }
+    else if(rxMsg.id == 3/*Lock state*/)
+    {
+        uploadMessage.send = uploadMessage.send | 0x04;
+        uploadMessage.lockState = rxMsg.data[0];
+    }
+    CAN_SendSingle(0x12345200, rxMsg.data[0], rxMsg.data[1]);     
 
 }
 
@@ -150,8 +154,8 @@ void CanApp_init(void)
     IfxMultican_Can_initModuleConfig(&canConfig, &MODULE_CAN);
     // initialize interrupt priority
     canConfig.nodePointer[TX_INTERRUPT_SRC_ID].priority = ISR_PRIORITY_CAN_TX;
-    canConfig.nodePointer[RX_INTERRUPT_SRC_ID].priority = ISR_PRIORITY_CAN_RX;      //¶¨ÒåÖĞ¶ÏµÈ¼¶
-    canConfig.nodePointer[RX_INTERRUPT_SRC_ID_2].priority = ISR_PRIORITY_CAN_RX_2;      //¶¨ÒåÖĞ¶ÏµÈ¼¶
+    canConfig.nodePointer[RX_INTERRUPT_SRC_ID].priority = ISR_PRIORITY_CAN_RX;  
+    canConfig.nodePointer[RX_INTERRUPT_SRC_ID_2].priority = ISR_PRIORITY_CAN_RX_2;   
     // initialize module
     IfxMultican_Can_initModule(&can, &canConfig);
 
@@ -160,7 +164,7 @@ void CanApp_init(void)
     IfxMultican_Can_Node_initConfig(&canNodeConfig, &can);
     canNodeConfig.baudrate = 125000; //
     canNodeConfig.nodeId = IfxMultican_NodeId_0;
-    canNodeConfig.rxPin = &IfxMultican_RXD0B_P20_7_IN;      //³õÊ¼»¯¹Ü½Å
+    canNodeConfig.rxPin = &IfxMultican_RXD0B_P20_7_IN;
     canNodeConfig.txPin = &IfxMultican_TXD0_P20_8_OUT;
     IfxMultican_Can_Node_init(&canSrcNode, &canNodeConfig);
 
@@ -172,40 +176,40 @@ void CanApp_init(void)
     canMsgObjConfig.frame = IfxMultican_Frame_transmit;
     canMsgObjConfig.control.messageLen = IfxMultican_DataLengthCode_8;
     canMsgObjConfig.control.extendedFrame = TRUE;
-    canMsgObjConfig.txInterrupt.enabled = TRUE;     //Ê¹ÄÜ·¢ËÍÖĞ¶Ï
-    canMsgObjConfig.txInterrupt.srcId = TX_INTERRUPT_SRC_ID;    //¶¨ÒåÖĞ¶ÏÔ´
+    canMsgObjConfig.txInterrupt.enabled = TRUE;  
+    canMsgObjConfig.txInterrupt.srcId = TX_INTERRUPT_SRC_ID;  
     // initialize receive message object
     IfxMultican_Can_MsgObj_init(&canSrcMsgObj, &canMsgObjConfig);
 
     IfxMultican_Can_MsgObj_initConfig(&canMsgObjConfig, &canSrcNode);
     canMsgObjConfig.msgObjId = 1;
-    canMsgObjConfig.messageId = 0x12345100;      //¶¨Òå´¥·¢ÖĞ¶ÏµÄID
+    canMsgObjConfig.messageId = 0x12345100;     
     canMsgObjConfig.acceptanceMask = 0xFFFFFFFF;
-    //canMsgObjConfig.acceptanceMask = 0x7FFFFFFFUL;  //Ö¸¶¨½ÓÊÕÑÚÂë¡£ÕâÊÇÂË²¨ÁËÂï£¿
+    //canMsgObjConfig.acceptanceMask = 0x7FFFFFFFUL;
     canMsgObjConfig.frame = IfxMultican_Frame_receive;
     canMsgObjConfig.control.messageLen = IfxMultican_DataLengthCode_8;
     canMsgObjConfig.control.extendedFrame = TRUE;
-    canMsgObjConfig.rxInterrupt.enabled = TRUE;     //Ê¹ÄÜ½ÓÊÕÖĞ¶Ï
-    canMsgObjConfig.rxInterrupt.srcId = RX_INTERRUPT_SRC_ID;    //¶¨ÒåÖĞ¶ÏÔ´
+    canMsgObjConfig.rxInterrupt.enabled = TRUE;   
+    canMsgObjConfig.rxInterrupt.srcId = RX_INTERRUPT_SRC_ID;   
     // initialize message object
     IfxMultican_Can_MsgObj_init(&canRcvMsgObj, &canMsgObjConfig);
 
-    //ÅäÖÃ½ÚµãIDÊ¹ÓÃµÄMO
+    //??????ID????MO
     IfxMultican_Can_MsgObj_initConfig(&canMsgObjConfig, &canSrcNode);
     canMsgObjConfig.msgObjId = 2;
-    canMsgObjConfig.messageId = 0x12345678;      //¶¨Òå´¥·¢ÖĞ¶ÏµÄID
+    canMsgObjConfig.messageId = 0x12345678;   
     canMsgObjConfig.acceptanceMask = 0xFFFFFFFF;
-    //canMsgObjConfig.acceptanceMask = 0x7FFFFFFFUL;  //Ö¸¶¨½ÓÊÕÑÚÂë¡£ÕâÊÇÂË²¨ÁËÂï£¿
+    //canMsgObjConfig.acceptanceMask = 0x7FFFFFFFUL; 
     canMsgObjConfig.frame = IfxMultican_Frame_receive;
     canMsgObjConfig.control.messageLen = IfxMultican_DataLengthCode_8;
     canMsgObjConfig.control.extendedFrame = TRUE;
-    canMsgObjConfig.rxInterrupt.enabled = TRUE;     //Ê¹ÄÜ½ÓÊÕÖĞ¶Ï
-    canMsgObjConfig.rxInterrupt.srcId = RX_INTERRUPT_SRC_ID_2;    //¶¨ÒåÖĞ¶ÏÔ´
+    canMsgObjConfig.rxInterrupt.enabled = TRUE;    
+    canMsgObjConfig.rxInterrupt.srcId = RX_INTERRUPT_SRC_ID_2;    
     // initialize message object
     IfxMultican_Can_MsgObj_init(&canRcvMsgObj2, &canMsgObjConfig);
 }
 
-//CAN·¢ËÍº¯Êı
+
 void CAN_SendSingle(uint32 id, uint32 high, uint32 low)
 {
     // Initialize the message structure
@@ -217,8 +221,28 @@ void CAN_SendSingle(uint32 id, uint32 high, uint32 low)
 
 }
 
+
+
+/*
+@currentTime variable address passed in, used to store the current time;
+@return 0 means success, 1 means failure
+*/
+int GetCurrentTime(uint64* currentTime)
+{
+    //dummy function that increase the time;
+    *currentTime = ((*currentTime)++)%3600000*12 ;
+    return 0;
+}
+
 int core0_main(void)
 {
+    struct AuthInfo authInfo[10];
+    struct AuthInfo temp[10]={0};
+    struct BackEndInfo backEndInfo;
+    uint64 currentTime;
+    int LockStatus;
+    int LockControl;
+    int ret;
     IfxCpu_enableInterrupts();
     
     /* !!WATCHDOG0 AND SAFETY WATCHDOG ARE DISABLED HERE!!
@@ -232,36 +256,44 @@ int core0_main(void)
     IfxCpu_waitEvent(&g_cpuSyncEvent, 1);
 
     initTime();
+
+    //LED
     IfxPort_setPinMode(&MODULE_P33, 8, IfxPort_Mode_outputPushPullGeneral);
-
     IfxPort_setPinMode(&MODULE_P33, 9, IfxPort_Mode_outputPushPullGeneral);
-
     IfxPort_setPinHigh(&MODULE_P33, 8);
     IfxPort_setPinLow(&MODULE_P33, 9);
 
 
     CanApp_init();
+
+    /*can usart rte initialization, read from the flash to get the AuthInfo structure*/
+    for(int i=0;i<10;i++)
+    {
+        authInfo[i].indentification = 3 * i;
+        authInfo[i].startTime = 3 * i + 1;
+        authInfo[i].endTime = 3 * i + 2;
+    }
+    eraseDflash();
+    writeAuthInfo(authInfo);
+    readAuthInfo(temp);
+
     while(1)
     {
-       CAN_SendSingle(0x01234567,0,1);   //µÍÎ» ¸ßÎ»
-//
-       waitTime(IfxStm_getTicksFromMilliseconds(BSP_DEFAULT_TIMER, WAIT_TIME));    /* Wait 500 milliseconds            */
-       IfxPort_togglePin(&MODULE_P33, 8);
-//       int  i=0;
-//       while(i<100000) i++;
-//       i=0;
-
-       /*CAN_SendSingle(0x200,0xffffffff,1);   //µÍÎ» ¸ßÎ»
-       int  j=0;
-       while(j<100000000) j++;
-       j=0;*/
-
-       /*ÑÓÊ±·­×ªµçÆ½
-        * int  i=0;
-       while(i<100000000) i++;
-       i=0;
-       IfxPort_togglePin(&MODULE_P33, 8);*/
-
+//        CAN_SendSingle(0x01234567,0x5678,0x1234);   //ÂµÃÃÂ» Â¸ÃŸÃÂ»
+// //
+//        waitTime(IfxStm_getTicksFromMilliseconds(BSP_DEFAULT_TIMER, WAIT_TIME));    /* Wait 500 milliseconds            */
+//        IfxPort_togglePin(&MODULE_P33, 8);
+    /*1. get the current time zeng*/
+    ret = GetCurrentTime(&currentTime);
+    if(ret)
+    {
+        while(1);
+    }
+    /*2. authenticate if the driver can use the car to determine the desiring lock state*/
+    /*3. send can message to the electric control module that indicate whether the lock should be open or on*/ 
+    /*4. read usart port for message from the 4G module, fill in the struct backEndInfo zeng*/
+    /*5. send the struct UploadMessage to the cloud according to the send value zeng*/
+    /*6. compare AuthInfo and BackEndInfo, update AuthInfo and dflash if they are not equal*/
     }
     return (1);
 }

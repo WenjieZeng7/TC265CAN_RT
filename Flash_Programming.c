@@ -34,6 +34,7 @@
 #include "IfxFlash.h"
 #include "IfxCpu.h"
 
+
 /*********************************************************************************************************************/
 /*------------------------------------------------------Macros-------------------------------------------------------*/
 /*********************************************************************************************************************/
@@ -52,7 +53,7 @@
 
 #define PFLASH_NUM_PAGE_TO_FLASH    2                           /* Number of pages to flash in the PFLASH           */
 #define PFLASH_NUM_SECTORS          1                           /* Number of PFLASH sectors to be erased            */
-#define DFLASH_NUM_PAGE_TO_FLASH    1                           /* Number of pages to flash in the DFLASH           */ //之前用到了8页也没问题
+#define DFLASH_NUM_PAGE_TO_FLASH    1                           /* Number of pages to flash in the DFLASH           */ //之前锟矫碉拷锟斤拷8页也没锟斤拷锟斤拷
 #define DFLASH_NUM_SECTORS          1                           /* Number of DFLASH sectors to be erased            */
 
 /* Reserved space for erase and program routines in bytes */
@@ -328,5 +329,70 @@ void verifyDataFlash()
     if(errors == 0)
     {
         IfxPort_setPinState(LED2, IfxPort_State_low);
+    }
+}
+void eraseDflash()
+{
+    uint32 page; /* Variable to cycle over all the pages             */
+
+    /* --------------- ERASE PROCESS --------------- */
+    /* Get the current password of the Safety WatchDog module */
+    uint16 endInitSafetyPassword = IfxScuWdt_getSafetyWatchdogPassword();
+
+    /* Erase the sector */
+    IfxScuWdt_clearSafetyEndinit(endInitSafetyPassword);                        /* Disable EndInit protection                       */
+    IfxFlash_eraseMultipleSectors(DFLASH_STARTING_ADDRESS, DFLASH_NUM_SECTORS); /* Erase the given sector           */
+    IfxScuWdt_setSafetyEndinit(endInitSafetyPassword);                          /* Enable EndInit protection                        */
+
+    /* Wait until the sector is erased */
+    IfxFlash_waitUnbusy(FLASH_MODULE, DATA_FLASH_0);
+}
+
+#define DFLASH_AUTHINFO_NUM_PAGE_TO_FLASH    30 
+void writeAuthInfo(struct AuthInfo* pAuthInfo)
+{
+    uint32* pData =  (uint32*)pAuthInfo;
+    uint16 endInitSafetyPassword = IfxScuWdt_getSafetyWatchdogPassword();
+
+    /* --------------- WRITE PROCESS --------------- */
+    for(int page = 0; page < DFLASH_AUTHINFO_NUM_PAGE_TO_FLASH; page++)      /* Loop over all the pages                          */
+    {
+        uint32 pageAddr = DFLASH_STARTING_ADDRESS + (page * DFLASH_PAGE_LENGTH); /* Get the address of the page     */
+
+        /* Enter in page mode */
+        IfxFlash_enterPageMode(pageAddr);
+
+        /* Wait until page mode is entered */
+        IfxFlash_waitUnbusy(FLASH_MODULE, DATA_FLASH_0);
+
+        /* Load data to be written in the page */
+        IfxFlash_loadPage2X32(pageAddr,*pData, *(pData+1)); /* Load two words of 32 bits each            */
+        pData = pData+2;
+
+        /* Write the loaded page */
+        IfxScuWdt_clearSafetyEndinit(endInitSafetyPassword);    /* Disable EndInit protection                       */
+        IfxFlash_writePage(pageAddr);                           /* Write the page                                   */
+        IfxScuWdt_setSafetyEndinit(endInitSafetyPassword);      /* Enable EndInit protection                        */
+
+        /* Wait until the data is written in the Data Flash memory */
+        IfxFlash_waitUnbusy(FLASH_MODULE, DATA_FLASH_0);
+    }
+}
+
+void readAuthInfo(struct AuthInfo* pAuthInfo)
+{
+    uint32 page;                                                /* Variable to cycle over all the pages             */
+    uint32 offset;                                              /* Variable to cycle over all the words in a page   */
+    uint32* pData =  (uint32*)pAuthInfo;
+    /* Verify the written data */
+    for(page = 0; page < DFLASH_AUTHINFO_NUM_PAGE_TO_FLASH; page++)                          /* Loop over all the pages      */
+    {
+        uint32 pageAddr = DFLASH_STARTING_ADDRESS + (page * DFLASH_PAGE_LENGTH);    /* Get the address of the page  */
+
+        for(offset = 0; offset < DFLASH_PAGE_LENGTH; offset += 0x4)                 /* Loop over the page length    */
+        {
+            *pData = MEM(pageAddr + offset);
+            pData++;
+        }
     }
 }
