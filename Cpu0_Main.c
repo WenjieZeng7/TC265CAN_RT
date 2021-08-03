@@ -38,7 +38,7 @@
 
 IfxCpu_syncEvent g_cpuSyncEvent = 0;
 
-//????CAN??î�?????MessageObject??
+//????CAN??卯锟�?????MessageObject??
 // CAN handle
 IfxMultican_Can can;
 // Nodes handles
@@ -73,7 +73,7 @@ void canIsrRxHandler_2(void)
     IfxMultican_Message rxMsg; 
 
     /* Read the received CAN message and store the status of the operation */
-    readStatus = IfxMultican_Can_MsgObj_readMessage(&canRcvMsgObj, &rxMsg); 
+    readStatus = IfxMultican_Can_MsgObj_readMessage(&canRcvMsgObj2, &rxMsg); 
     
     if (rxMsg.id == 0 /*ICCode*/)
     {
@@ -104,13 +104,13 @@ void canIsrRxHandler_2(void)
 
 #define WAIT_TIME 500   /* Wait time constant in milliseconds   */
 
-//?????§Ø???????? ???LED1
+//?????搂脴???????? ???LED1
 void canIsrTxHandler(void)
 {
     IfxPort_togglePin(&MODULE_P33, 8);
 }
 
-//?????§Ø???????? ????LED2
+//?????搂脴???????? ????LED2
 void canIsrRxHandler(void)
 {
     IfxPort_togglePin(&MODULE_P33, 9);
@@ -143,7 +143,7 @@ void canIsrRxHandler(void)
         uploadMessage.send = uploadMessage.send | 0x04;
         uploadMessage.lockState = rxMsg.data[0];
     }
-    CAN_SendSingle(0x12345200, rxMsg.data[0], rxMsg.data[1]);     
+    CAN_SendSingle(0x12345201, rxMsg.data[0], rxMsg.data[1]);
 
 }
 
@@ -183,8 +183,8 @@ void CanApp_init(void)
 
     IfxMultican_Can_MsgObj_initConfig(&canMsgObjConfig, &canSrcNode);
     canMsgObjConfig.msgObjId = 1;
-    canMsgObjConfig.messageId = 0x12345100;     
-    canMsgObjConfig.acceptanceMask = 0xFFFFFFFF;
+    canMsgObjConfig.messageId = 0x00000000;     
+    canMsgObjConfig.acceptanceMask = 0xFFFFFFF0;
     //canMsgObjConfig.acceptanceMask = 0x7FFFFFFFUL;
     canMsgObjConfig.frame = IfxMultican_Frame_receive;
     canMsgObjConfig.control.messageLen = IfxMultican_DataLengthCode_8;
@@ -194,7 +194,7 @@ void CanApp_init(void)
     // initialize message object
     IfxMultican_Can_MsgObj_init(&canRcvMsgObj, &canMsgObjConfig);
 
-    //??????ID????MO
+
     IfxMultican_Can_MsgObj_initConfig(&canMsgObjConfig, &canSrcNode);
     canMsgObjConfig.msgObjId = 2;
     canMsgObjConfig.messageId = 0x12345678;   
@@ -279,7 +279,7 @@ int core0_main(void)
 
     while(1)
     {
-//        CAN_SendSingle(0x01234567,0x5678,0x1234);   //µÍÎ» ¸ßÎ»
+//        CAN_SendSingle(0x01234567,0x5678,0x1234);   //碌脥脦禄 赂脽脦禄
 // //
 //        waitTime(IfxStm_getTicksFromMilliseconds(BSP_DEFAULT_TIMER, WAIT_TIME));    /* Wait 500 milliseconds            */
 //        IfxPort_togglePin(&MODULE_P33, 8);
