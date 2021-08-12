@@ -348,14 +348,13 @@ void eraseDflash()
     IfxFlash_waitUnbusy(FLASH_MODULE, DATA_FLASH_0);
 }
 
-#define DFLASH_AUTHINFO_NUM_PAGE_TO_FLASH    30 
 void writeAuthInfo(struct AuthInfo* pAuthInfo)
 {
     uint32* pData =  (uint32*)pAuthInfo;
     uint16 endInitSafetyPassword = IfxScuWdt_getSafetyWatchdogPassword();
 
     /* --------------- WRITE PROCESS --------------- */
-    for(int page = 0; page < DFLASH_AUTHINFO_NUM_PAGE_TO_FLASH; page++)      /* Loop over all the pages                          */
+    for(int page = 0; page < BufferLen*3; page++)      /* Loop over all the pages                          */
     {
         uint32 pageAddr = DFLASH_STARTING_ADDRESS + (page * DFLASH_PAGE_LENGTH); /* Get the address of the page     */
 
@@ -385,7 +384,7 @@ void readAuthInfo(struct AuthInfo* pAuthInfo)
     uint32 offset;                                              /* Variable to cycle over all the words in a page   */
     uint32* pData =  (uint32*)pAuthInfo;
     /* Verify the written data */
-    for(page = 0; page < DFLASH_AUTHINFO_NUM_PAGE_TO_FLASH; page++)                          /* Loop over all the pages      */
+    for(page = 0; page < BufferLen*3; page++)                          /* Loop over all the pages      */
     {
         uint32 pageAddr = DFLASH_STARTING_ADDRESS + (page * DFLASH_PAGE_LENGTH);    /* Get the address of the page  */
 

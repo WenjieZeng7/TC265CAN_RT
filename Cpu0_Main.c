@@ -64,8 +64,10 @@ IFX_INTERRUPT(canIsrRxHandler_2, 0, ISR_PRIORITY_CAN_RX_2);
 
 #define MEM(address)                *((uint32 *)(address))      /* Macro to simplify the access to a memory address */
 #define DFLASH_STARTING_ADDRESS     0xAF000000                  /* Address of the DFLASH where the data is written  */
-struct UploadMessage uploadMessage;
-uint64 ICCode;
+struct UploadMessage uploadMessage = {
+    .lockState = 0  //0 means lock state is unknown
+};
+uint64 ICCode = 1234567;
 void canIsrRxHandler_2(void)
 {
     IfxPort_togglePin(&MODULE_P33, 9);
@@ -238,10 +240,15 @@ int core0_main(void)
 {
     struct AuthInfo authInfo[10];
     struct AuthInfo temp[10]={0};
-    struct BackEndInfo backEndInfo;
-    uint64 currentTime;
-    int LockStatus;
-    int LockControl;
+    struct BackEndInfo backEndInfo ={
+        .remoteLockControl = 0
+    };
+    uint64 currentTime=0;
+    int LockStatus;     //useless for now
+    //the two least significant bits determine the desired lock state: 0 means no operation, 1 means open,2 means lock
+    //the third bit is on if lock is determined by timestamp
+    //the fourth bit is on if lock is determined by cloud command
+    int LockControl=0;    
     int ret;
     IfxCpu_enableInterrupts();
     
@@ -267,15 +274,20 @@ int core0_main(void)
     CanApp_init();
 
     /*can usart rte initialization, read from the flash to get the AuthInfo structure*/
-    for(int i=0;i<10;i++)
-    {
-        authInfo[i].indentification = 3 * i;
-        authInfo[i].startTime = 3 * i + 1;
-        authInfo[i].endTime = 3 * i + 2;
-    }
-    eraseDflash();
-    writeAuthInfo(authInfo);
-    readAuthInfo(temp);
+
+    /*flash test**************************************************************************************/
+    // for(int i=0;i<BufferLen;i++)
+    // {
+    //     authInfo[i].indentification = 3 * i;
+    //     authInfo[i].startTime = 3 * i + 1;
+    //     authInfo[i].endTime = 3 * i + 2;
+    // }
+    // eraseDflash();
+    // writeAuthInfo(authInfo);
+    // readAuthInfo(temp);
+    /************************************************************************************************/
+
+    readAuthInfo(authInfo);
 
     while(1)
     {
@@ -290,6 +302,25 @@ int core0_main(void)
         while(1);
     }
     /*2. authenticate if the driver can use the car to determine the desiring lock state*/
+    if (backEndInfo.remoteLockControl == 0)
+    {
+        for (int i = 0; i < BufferLen; i++)
+        {
+            if (authInfo[i].indentification == ICCode && currentTime > authInfo[i].startTime && currentTime < authInfo[i].endTime)
+            {
+                //1 means open, the third bit is on means the lock state is determined by time stamp
+                LockControl = 1 | 0b100; 
+            }
+        }
+    }else if(backEndInfo.remoteLockControl == 1)
+    {
+        //1 means open, the forth bit is on means the lock state is determined by cloud command
+        LockControl = 1 | 0b1000; 
+    }else if(backEndInfo.remoteLockControl == 2)
+    {
+        //1 means closed, the forth bit is on means the lock state is determined by cloud command
+        LockControl = 2 | 0b1000; 
+    }
     /*3. send can message to the electric control module that indicate whether the lock should be open or on*/ 
     /*4. read usart port for message from the 4G module, fill in the struct backEndInfo zeng*/
     /*5. send the struct UploadMessage to the cloud according to the send value zeng*/
