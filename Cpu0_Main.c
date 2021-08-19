@@ -238,8 +238,8 @@ int GetCurrentTime(uint64* currentTime)
 
 int core0_main(void)
 {
-    struct AuthInfo authInfo[10];
-    struct AuthInfo temp[10]={0};
+    struct AuthInfo authInfo[BufferLen];
+    struct AuthInfo temp[BufferLen]={0};
     struct BackEndInfo backEndInfo ={
         .remoteLockControl = 0
     };
@@ -288,9 +288,15 @@ int core0_main(void)
     /************************************************************************************************/
 
     readAuthInfo(authInfo);
+    for (int i = 0; i < BufferLen; i++)
+    {
+        backEndInfo.authInfo[i]=authInfo[i];
+    }
 
     while(1)
     {
+        //restore lock control to no operation
+        LockControl=0;
 //        CAN_SendSingle(0x01234567,0x5678,0x1234);   //碌脥脦禄 赂脽脦禄
 // //
 //        waitTime(IfxStm_getTicksFromMilliseconds(BSP_DEFAULT_TIMER, WAIT_TIME));    /* Wait 500 milliseconds            */
@@ -309,22 +315,44 @@ int core0_main(void)
             if (authInfo[i].indentification == ICCode && currentTime > authInfo[i].startTime && currentTime < authInfo[i].endTime)
             {
                 //1 means open, the third bit is on means the lock state is determined by time stamp
-                LockControl = 1 | 0b100; 
+                LockControl = 1 | 4;
+                break;
             }
         }
     }else if(backEndInfo.remoteLockControl == 1)
     {
         //1 means open, the forth bit is on means the lock state is determined by cloud command
-        LockControl = 1 | 0b1000; 
+        LockControl = 1 | 8;
     }else if(backEndInfo.remoteLockControl == 2)
     {
         //1 means closed, the forth bit is on means the lock state is determined by cloud command
-        LockControl = 2 | 0b1000; 
+        LockControl = 2 | 8;
     }
     /*3. send can message to the electric control module that indicate whether the lock should be open or on*/ 
+    CAN_SendSingle(0x98354990, LockControl, 0);
     /*4. read usart port for message from the 4G module, fill in the struct backEndInfo zeng*/
     /*5. send the struct UploadMessage to the cloud according to the send value zeng*/
     /*6. compare AuthInfo and BackEndInfo, update AuthInfo and dflash if they are not equal*/
+    int i = 0;
+    for (; i < BufferLen; i++)
+    {
+        if (authInfo[i].indentification != backEndInfo.authInfo[i].indentification ||
+            authInfo[i].startTime != backEndInfo.authInfo[i].startTime ||
+            authInfo[i].endTime != backEndInfo.authInfo[i].endTime)
+        {
+            break;
+        }
+    }
+    if( i != BufferLen){
+        for (i=0; i < BufferLen; i++)
+        {
+            authInfo[i].indentification = backEndInfo.authInfo[i].indentification;
+            authInfo[i].startTime = backEndInfo.authInfo[i].startTime;
+            authInfo[i].endTime = backEndInfo.authInfo[i].endTime;
+        }
+        eraseDflash();
+        writeAuthInfo(authInfo);
+    }
     }
     return (1);
 }

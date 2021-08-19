@@ -10,7 +10,7 @@ struct AuthInfo {
 };
 
 struct BackEndInfo {
-    struct AuthInfo authInfo[10];
+    struct AuthInfo authInfo[BufferLen];
     int remoteLockControl;  //0 means no lock according to time stamp,1 means open,2 means lock
 };
 
