@@ -1,0 +1,7 @@
+{
+    "files.associations": {
+        "platform_types.h": "c",
+        "ifx_types.h": "c"
+    },
+    "C_Cpp.errorSquiggles": "Disabled"
+}
