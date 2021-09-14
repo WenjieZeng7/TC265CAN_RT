@@ -29,6 +29,7 @@
 #include "Ifx_Types.h"
 #include "IfxCpu.h"
 #include "IfxScuWdt.h"
+#include "GPIO_RTC.h"
 
 #include "SysSe/Bsp/Bsp.h"   
 #include "Port/Io/IfxPort_Io.h"
@@ -223,7 +224,47 @@ void CAN_SendSingle(uint32 id, uint32 high, uint32 low)
 
 }
 
+/**
+  * @brief Convert date to Unix timestamp
+  * @param[in] date Pointer to a structure representing the date and time
+  * @return Unix timestamp
+  **/
 
+uint64 convertDateToUnixTime(void)
+{
+    uint64 y;
+    uint64 m;
+    uint64 d;
+    uint64 t;
+
+    //Year
+    y = clock_data[6]/16*10+clock_data[6]%16+2000;
+    //Month of year
+    m = clock_data[4]/16*10+clock_data[4]%16;
+    //Day of month
+    d = clock_data[3]/16*10+clock_data[3]%16;
+
+    //January and February are counted as months 13 and 14 of the previous year
+    if (m <= 2)
+    {
+        m += 12;
+        y -= 1;
+    }
+
+    //Convert years to days
+    t = (365 * y) + (y / 4) - (y / 100) + (y / 400);
+    //Convert months to days
+    t += (30 * m) + (3 * (m + 1) / 5) + d;
+    //Unix time starts on January 1st, 1970
+    t -= 719561;
+    //Convert days to seconds
+    t *= 86400;
+    //Add hours, minutes and seconds
+    t += (3600 * (clock_data[2]/16*10+clock_data[2]%16)) + (60 * (clock_data[1]/16*10+clock_data[1]%16)) + (clock_data[0]/16*10+clock_data[0]%16);
+
+    //Return Unix time
+    return t;
+}
 
 /*
 @currentTime variable address passed in, used to store the current time;
@@ -232,9 +273,14 @@ void CAN_SendSingle(uint32 id, uint32 high, uint32 low)
 int GetCurrentTime(uint64* currentTime)
 {
     //dummy function that increase the time;
-    *currentTime = ((*currentTime)++)%3600000*12 ;
+    CE_On();
+    Read_Burst();
+    CE_Off();
+    *currentTime = convertDateToUnixTime();
     return 0;
 }
+
+
 
 int core0_main(void)
 {
@@ -292,16 +338,17 @@ int core0_main(void)
     {
         backEndInfo.authInfo[i]=authInfo[i];
     }
-
+    init_GPIOs(); 
     while(1)
-    {
+    {   
+        
         //restore lock control to no operation
         LockControl=0;
 //        CAN_SendSingle(0x01234567,0x5678,0x1234);   //碌脥脦禄 赂脽脦禄
 // //
 //        waitTime(IfxStm_getTicksFromMilliseconds(BSP_DEFAULT_TIMER, WAIT_TIME));    /* Wait 500 milliseconds            */
 //        IfxPort_togglePin(&MODULE_P33, 8);
-    /*1. get the current time zeng*/
+    /*1. get the current time*/
     ret = GetCurrentTime(&currentTime);
     if(ret)
     {
