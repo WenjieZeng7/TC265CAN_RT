@@ -172,15 +172,15 @@ void settime(void)
     CE_Off();
     CE_On();
     Write_Byte(ADR_WR_MIN);  //Go to minute register
-    Write_Byte(0x31);  //set as..
+    Write_Byte(0x05);  //set as..
     CE_Off();
     CE_On();
     Write_Byte(ADR_WR_HR);  //Go to hour register
-    Write_Byte(0x11);  //set as..
+    Write_Byte(0x08);  //set as..
     CE_Off();
     CE_On();
     Write_Byte(ADR_WR_DATE);  //Go to date register
-    Write_Byte(0x14);  //set as..
+    Write_Byte(0x20);  //set as..
     CE_Off();
     CE_On();
     Write_Byte(ADR_WR_MON);  //Go to month register
@@ -188,7 +188,7 @@ void settime(void)
     CE_Off();
     CE_On();
     Write_Byte(ADR_WR_DAY);  //Go to day register
-    Write_Byte(0x02);  //set as..
+    Write_Byte(0x01);  //set as..
     CE_Off();
     CE_On();
     Write_Byte(ADR_WR_YR);  //Go to year register

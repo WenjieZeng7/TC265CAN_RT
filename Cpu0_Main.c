@@ -49,8 +49,10 @@ IfxMultican_Can_MsgObj canSrcMsgObj;
 IfxMultican_Can_MsgObj canRcvMsgObj;
 IfxMultican_Can_MsgObj canRcvMsgObj2;
 
+void encrypt(uint32* message);
+void decrypt(uint32* message);
 void CAN_SendSingle(uint32 id, uint32 high, uint32 low);
-
+IfxMultican_Status CAN_receiveSingle(IfxMultican_Can_MsgObj *msgObj, IfxMultican_Message *msg);
 
 #define ISR_PRIORITY_CAN_RX         1                           /* Define the CAN RX interrupt priority              */
 #define ISR_PRIORITY_CAN_TX         2                           /* Define the CAN TX interrupt priority              */
@@ -65,6 +67,9 @@ IFX_INTERRUPT(canIsrRxHandler_2, 0, ISR_PRIORITY_CAN_RX_2);
 
 #define MEM(address)                *((uint32 *)(address))      /* Macro to simplify the access to a memory address */
 #define DFLASH_STARTING_ADDRESS     0xAF000000                  /* Address of the DFLASH where the data is written  */
+
+#define GPIO_IN         &MODULE_P10, 5  /* Port pin for the input  */
+#define GPIO_OUT        &MODULE_P10, 4  /* Port pin for the output  */
 struct UploadMessage uploadMessage = {
     .lockState = 0  //0 means lock state is unknown
 };
@@ -76,7 +81,7 @@ void canIsrRxHandler_2(void)
     IfxMultican_Message rxMsg; 
 
     /* Read the received CAN message and store the status of the operation */
-    readStatus = IfxMultican_Can_MsgObj_readMessage(&canRcvMsgObj2, &rxMsg); 
+    readStatus = CAN_receiveSingle(&canRcvMsgObj2, &rxMsg); 
     
     if (rxMsg.id == 0 /*ICCode*/)
     {
@@ -120,7 +125,7 @@ void canIsrRxHandler(void)
     IfxMultican_Status readStatus;      
     IfxMultican_Message rxMsg;          
     /* Read the received CAN message and store the status of the operation */
-    readStatus = IfxMultican_Can_MsgObj_readMessage(&canRcvMsgObj, &rxMsg);     
+    readStatus = CAN_receiveSingle(&canRcvMsgObj, &rxMsg);     
 
     
     if(rxMsg.id == 0/*ICCode*/)
@@ -212,16 +217,36 @@ void CanApp_init(void)
     IfxMultican_Can_MsgObj_init(&canRcvMsgObj2, &canMsgObjConfig);
 }
 
-
+void encrypt(uint32* message)
+{
+    *message = *message +1;
+}
+void decrypt(uint32* message)
+{
+    *message = *message -1;
+}
 void CAN_SendSingle(uint32 id, uint32 high, uint32 low)
 {
     // Initialize the message structure
     IfxMultican_Message txMsg;
+    encrypt(&high);
+    encrypt(&low);
     IfxMultican_Message_init(&txMsg, id, low, high, IfxMultican_DataLengthCode_8);
 
     // Transmit Data
     while( IfxMultican_Can_MsgObj_sendMessage(&canSrcMsgObj, &txMsg) == IfxMultican_Status_notSentBusy );
 
+}
+
+IfxMultican_Status CAN_receiveSingle(IfxMultican_Can_MsgObj *msgObj, IfxMultican_Message *msg)
+{
+
+    IfxMultican_Status readStatus;
+    /* Read the received CAN message and store the status of the operation */
+    readStatus = IfxMultican_Can_MsgObj_readMessage(msgObj, msg); 
+    decrypt(&(msg->data[0]));
+    decrypt(&(msg->data[1]));
+    return readStatus;
 }
 
 /**
@@ -280,7 +305,12 @@ int GetCurrentTime(uint64* currentTime)
     return 0;
 }
 
+void initOnsiteLock(void){
 
+    IfxPort_setPinMode(GPIO_IN, IfxPort_Mode_inputPullDown);
+    IfxPort_setPinMode(GPIO_OUT, IfxPort_Mode_outputPushPullGeneral);
+    IfxPort_setPinState(GPIO_OUT, IfxPort_State_high);
+}
 
 int core0_main(void)
 {
@@ -339,6 +369,7 @@ int core0_main(void)
         backEndInfo.authInfo[i]=authInfo[i];
     }
     init_GPIOs(); 
+    initOnsiteLock();
     while(1)
     {   
         
@@ -372,8 +403,15 @@ int core0_main(void)
         LockControl = 1 | 8;
     }else if(backEndInfo.remoteLockControl == 2)
     {
-        //1 means closed, the forth bit is on means the lock state is determined by cloud command
+        //2 means closed, the forth bit is on means the lock state is determined by cloud command
         LockControl = 2 | 8;
+    }
+
+    // on site lock control is of higher precedence, so it is placed later
+    if ((IfxPort_getPinState(GPIO_IN)) == 0x01)     //high voltage means lock the car , low voltage means no action
+    {
+        //2 means closed, the fifth bit is on means the lock state is determined by on site physical device
+        LockControl = 2 | 16;
     }
     /*3. send can message to the electric control module that indicate whether the lock should be open or on*/ 
     CAN_SendSingle(0x98354990, LockControl, 0);
