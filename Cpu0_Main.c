@@ -72,6 +72,67 @@ IFX_INTERRUPT(canIsrRxHandler_2, 0, ISR_PRIORITY_CAN_RX_2);
 struct UploadMessage uploadMessage = {
     .lockState = 0 //0 means lock state is unknown
 };
+
+struct AuthInfo {
+    uint64 indentification;
+    uint64 startTime;
+    uint64 endTime;
+};
+
+
+struct AuthInfo_BCD {
+    uint8 indentification[6];
+    uint8 startTime[6];
+    uint8 endTime[6];
+};
+uint64 convertDateToUnixTime(uint8 clock_data[6])
+{
+    uint64 y;
+    uint64 m;
+    uint64 d;
+    uint64 t;
+
+    //Year
+    y = clock_data[0] / 16 * 10 + clock_data[0] % 16 + 2000;
+    //Month of year
+    m = clock_data[1] / 16 * 10 + clock_data[1] % 16;
+    //Day of month
+    d = clock_data[2] / 16 * 10 + clock_data[2] % 16;
+
+    //January and February are counted as months 13 and 14 of the previous year
+    if (m <= 2)
+    {
+        m += 12;
+        y -= 1;
+    }
+
+    //Convert years to days
+    t = (365 * y) + (y / 4) - (y / 100) + (y / 400);
+    //Convert months to days
+    t += (30 * m) + (3 * (m + 1) / 5) + d;
+    //Unix time starts on January 1st, 1970
+    t -= 719561;
+    //Convert days to seconds
+    t *= 86400;
+    //Add hours, minutes and seconds
+    t += (3600 * (clock_data[3] / 16 * 10 + clock_data[3] % 16)) + (60 * (clock_data[4] / 16 * 10 + clock_data[4] % 16)) + (clock_data[5] / 16 * 10 + clock_data[5] % 16);
+
+    //Return Unix time
+    return t;
+}
+struct AuthInfo BSDConvert(struct AuthInfo_BCD bcd)
+{
+    struct AuthInfo result;
+    result.startTime = convertDateToUnixTime(bcd.startTime);
+    result.endTime = convertDateToUnixTime(bcd.endTime);
+    result.indentification=0;
+    for(int i=0;i<6;i++) {
+        result.indentification = result.indentification +clock_data[i] / 16 * 10 + clock_data[i] % 16;
+        result.indentification = result.indentification*100;
+    }
+    return result;
+}
+
 uint64 ICCode = 1234567;
 void canIsrRxHandler_2(void)
 {
@@ -216,11 +277,11 @@ void CanApp_init(void)
 
 void encrypt(uint32 *message)
 {
-    *message = *message + 1;
+    *message = *message ^ 255;
 }
 void decrypt(uint32 *message)
 {
-    *message = *message - 1;
+    *message = *message ^ 255;
 }
 void CAN_SendSingle(uint32 id, uint32 high, uint32 low)
 {
@@ -246,48 +307,6 @@ IfxMultican_Status CAN_receiveSingle(IfxMultican_Can_MsgObj *msgObj, IfxMultican
     return readStatus;
 }
 
-/**
-  * @brief Convert date to Unix timestamp
-  * @param[in] date Pointer to a structure representing the date and time
-  * @return Unix timestamp
-  **/
-
-uint64 convertDateToUnixTime(void)
-{
-    uint64 y;
-    uint64 m;
-    uint64 d;
-    uint64 t;
-
-    //Year
-    y = clock_data[6] / 16 * 10 + clock_data[6] % 16 + 2000;
-    //Month of year
-    m = clock_data[4] / 16 * 10 + clock_data[4] % 16;
-    //Day of month
-    d = clock_data[3] / 16 * 10 + clock_data[3] % 16;
-
-    //January and February are counted as months 13 and 14 of the previous year
-    if (m <= 2)
-    {
-        m += 12;
-        y -= 1;
-    }
-
-    //Convert years to days
-    t = (365 * y) + (y / 4) - (y / 100) + (y / 400);
-    //Convert months to days
-    t += (30 * m) + (3 * (m + 1) / 5) + d;
-    //Unix time starts on January 1st, 1970
-    t -= 719561;
-    //Convert days to seconds
-    t *= 86400;
-    //Add hours, minutes and seconds
-    t += (3600 * (clock_data[2] / 16 * 10 + clock_data[2] % 16)) + (60 * (clock_data[1] / 16 * 10 + clock_data[1] % 16)) + (clock_data[0] / 16 * 10 + clock_data[0] % 16);
-
-    //Return Unix time
-    return t;
-}
-
 /*
 @currentTime variable address passed in, used to store the current time;
 @return 0 means success, 1 means failure
@@ -298,7 +317,14 @@ int GetCurrentTime(uint64 *currentTime)
     CE_On();
     Read_Burst();
     CE_Off();
-    *currentTime = convertDateToUnixTime();
+    uint8 temp[6];
+    temp[0] = clock_data[6];
+    temp[1] = clock_data[4];
+    temp[2] = clock_data[3];
+    temp[3] = clock_data[2];
+    temp[4] = clock_data[1];
+    temp[5] = clock_data[6];
+    *currentTime = convertDateToUnixTime(temp);
     return 0;
 }
 

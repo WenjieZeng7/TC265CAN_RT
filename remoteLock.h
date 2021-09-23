@@ -9,6 +9,14 @@ struct AuthInfo {
     uint64 endTime;
 };
 
+
+struct AuthInfo_BCD {
+    uint8 indentification[6];
+    uint8 startTime[6];
+    uint8 endTime[6];
+};
+
+
 struct BackEndInfo {
     struct AuthInfo authInfo[BufferLen];
     int remoteLockControl;  //0 means no lock according to time stamp,1 means open,2 means lock
