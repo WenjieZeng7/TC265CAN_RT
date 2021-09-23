@@ -33,6 +33,7 @@
 #include "Flash_Programming.h"
 #include "IfxFlash.h"
 #include "IfxCpu.h"
+#include "remoteLock.h"
 
 
 /*********************************************************************************************************************/

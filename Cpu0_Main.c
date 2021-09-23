@@ -36,6 +36,16 @@
 #include "Multican/Can/IfxMultican_Can.h"
 #include "Flash_Programming.h"
 
+#include "Ifx_Types.h"
+#include "IfxCpu.h"
+#include "IfxScuWdt.h"
+#include "ASCLIN_UART.h"
+#include "stdio.h"
+#include "jtt808.h"
+#include "remoteLock.h"
+
+#include "SysSe/Bsp/Bsp.h"   //包含时钟相关，延迟函数在此实现
+
 IfxCpu_syncEvent g_cpuSyncEvent = 0;
 
 //????CAN??卯锟�?????MessageObject??
@@ -48,10 +58,10 @@ IfxMultican_Can_MsgObj canSrcMsgObj;
 IfxMultican_Can_MsgObj canRcvMsgObj;
 IfxMultican_Can_MsgObj canRcvMsgObj2;
 
-void encrypt(uint32 *message);
-void decrypt(uint32 *message);
-void CAN_SendSingle(uint32 id, uint32 high, uint32 low);
-IfxMultican_Status CAN_receiveSingle(IfxMultican_Can_MsgObj *msgObj, IfxMultican_Message *msg);
+void encrypt (uint32 *message);
+void decrypt (uint32 *message);
+void CAN_SendSingle (uint32 id, uint32 high, uint32 low);
+IfxMultican_Status CAN_receiveSingle (IfxMultican_Can_MsgObj *msgObj, IfxMultican_Message *msg);
 
 #define ISR_PRIORITY_CAN_RX 1   /* Define the CAN RX interrupt priority              */
 #define ISR_PRIORITY_CAN_TX 2   /* Define the CAN TX interrupt priority              */
@@ -69,23 +79,12 @@ IFX_INTERRUPT(canIsrRxHandler_2, 0, ISR_PRIORITY_CAN_RX_2);
 
 #define GPIO_IN &MODULE_P10, 5  /* Port pin for the input  */
 #define GPIO_OUT &MODULE_P10, 4 /* Port pin for the output  */
-struct UploadMessage uploadMessage = {
-    .lockState = 0 //0 means lock state is unknown
-};
+struct UploadMessage uploadMessage = {.lockState = 0 //0 means lock state is unknown
+        };
+struct BackEndInfo backEndInfo = {.remoteLockControl = 0};
+int authID = 0;
 
-struct AuthInfo {
-    uint64 indentification;
-    uint64 startTime;
-    uint64 endTime;
-};
-
-
-struct AuthInfo_BCD {
-    uint8 indentification[6];
-    uint8 startTime[6];
-    uint8 endTime[6];
-};
-uint64 convertDateToUnixTime(uint8 clock_data[6])
+uint64 convertDateToUnixTime (uint8 clock_data[6])
 {
     uint64 y;
     uint64 m;
@@ -115,26 +114,28 @@ uint64 convertDateToUnixTime(uint8 clock_data[6])
     //Convert days to seconds
     t *= 86400;
     //Add hours, minutes and seconds
-    t += (3600 * (clock_data[3] / 16 * 10 + clock_data[3] % 16)) + (60 * (clock_data[4] / 16 * 10 + clock_data[4] % 16)) + (clock_data[5] / 16 * 10 + clock_data[5] % 16);
+    t += (3600 * (clock_data[3] / 16 * 10 + clock_data[3] % 16)) + (60 * (clock_data[4] / 16 * 10 + clock_data[4] % 16))
+            + (clock_data[5] / 16 * 10 + clock_data[5] % 16);
 
     //Return Unix time
     return t;
 }
-struct AuthInfo BSDConvert(struct AuthInfo_BCD bcd)
+struct AuthInfo BSDConvert (struct AuthInfo_BCD bcd)
 {
     struct AuthInfo result;
     result.startTime = convertDateToUnixTime(bcd.startTime);
     result.endTime = convertDateToUnixTime(bcd.endTime);
-    result.indentification=0;
-    for(int i=0;i<6;i++) {
-        result.indentification = result.indentification +clock_data[i] / 16 * 10 + clock_data[i] % 16;
-        result.indentification = result.indentification*100;
+    result.indentification = 0;
+    for (int i = 0; i < 6; i++)
+    {
+        result.indentification = result.indentification + clock_data[i] / 16 * 10 + clock_data[i] % 16;
+        result.indentification = result.indentification * 100;
     }
     return result;
 }
 
 uint64 ICCode = 1234567;
-void canIsrRxHandler_2(void)
+void canIsrRxHandler_2 (void)
 {
     IfxPort_togglePin(&MODULE_P33, 9);
     IfxMultican_Status readStatus;
@@ -173,13 +174,13 @@ void canIsrRxHandler_2(void)
 #define WAIT_TIME 500 /* Wait time constant in milliseconds   */
 
 //?????搂脴???????? ???LED1
-void canIsrTxHandler(void)
+void canIsrTxHandler (void)
 {
     IfxPort_togglePin(&MODULE_P33, 8);
 }
 
 //?????搂脴???????? ????LED2
-void canIsrRxHandler(void)
+void canIsrRxHandler (void)
 {
     IfxPort_togglePin(&MODULE_P33, 9);
     IfxMultican_Status readStatus;
@@ -214,7 +215,7 @@ void canIsrRxHandler(void)
     CAN_SendSingle(0x12345201, rxMsg.data[0], rxMsg.data[1]);
 }
 
-void CanApp_init(void)
+void CanApp_init (void)
 {
     // create configuration
     IfxMultican_Can_Config canConfig;
@@ -275,15 +276,15 @@ void CanApp_init(void)
     IfxMultican_Can_MsgObj_init(&canRcvMsgObj2, &canMsgObjConfig);
 }
 
-void encrypt(uint32 *message)
+void encrypt (uint32 *message)
 {
     *message = *message ^ 255;
 }
-void decrypt(uint32 *message)
+void decrypt (uint32 *message)
 {
     *message = *message ^ 255;
 }
-void CAN_SendSingle(uint32 id, uint32 high, uint32 low)
+void CAN_SendSingle (uint32 id, uint32 high, uint32 low)
 {
     // Initialize the message structure
     IfxMultican_Message txMsg;
@@ -296,7 +297,7 @@ void CAN_SendSingle(uint32 id, uint32 high, uint32 low)
         ;
 }
 
-IfxMultican_Status CAN_receiveSingle(IfxMultican_Can_MsgObj *msgObj, IfxMultican_Message *msg)
+IfxMultican_Status CAN_receiveSingle (IfxMultican_Can_MsgObj *msgObj, IfxMultican_Message *msg)
 {
 
     IfxMultican_Status readStatus;
@@ -308,10 +309,10 @@ IfxMultican_Status CAN_receiveSingle(IfxMultican_Can_MsgObj *msgObj, IfxMultican
 }
 
 /*
-@currentTime variable address passed in, used to store the current time;
-@return 0 means success, 1 means failure
-*/
-int GetCurrentTime(uint64 *currentTime)
+ @currentTime variable address passed in, used to store the current time;
+ @return 0 means success, 1 means failure
+ */
+int GetCurrentTime (uint64 *currentTime)
 {
     //dummy function that increase the time;
     CE_On();
@@ -328,7 +329,7 @@ int GetCurrentTime(uint64 *currentTime)
     return 0;
 }
 
-void initOnsiteLock(void)
+void initOnsiteLock (void)
 {
 
     IfxPort_setPinMode(GPIO_IN, IfxPort_Mode_inputPullDown);
@@ -336,12 +337,10 @@ void initOnsiteLock(void)
     IfxPort_setPinState(GPIO_OUT, IfxPort_State_high);
 }
 
-int core0_main(void)
+int core0_main (void)
 {
     struct AuthInfo authInfo[BufferLen];
     struct AuthInfo temp[BufferLen] = {0};
-    struct BackEndInfo backEndInfo = {
-        .remoteLockControl = 0};
     uint64 currentTime = 0;
     int LockStatus; //useless for now
     //the two least significant bits determine the desired lock state: 0 means no operation, 1 means open,2 means lock
@@ -370,6 +369,10 @@ int core0_main(void)
     IfxPort_setPinLow(&MODULE_P33, 9);
 
     CanApp_init();
+
+    initNet(); //初始化4G模块
+    dataReady(); //鉴权信息
+    getData(); //接收服务器下发消息，包括①服务器通用应答，②锁控制命令下发，③授权信息下发
 
     /*can usart rte initialization, read from the flash to get the AuthInfo structure*/
 
@@ -413,7 +416,8 @@ int core0_main(void)
         {
             for (int i = 0; i < BufferLen; i++)
             {
-                if (authInfo[i].indentification == ICCode && currentTime > authInfo[i].startTime && currentTime < authInfo[i].endTime)
+                if (authInfo[i].indentification == ICCode && currentTime > authInfo[i].startTime
+                        && currentTime < authInfo[i].endTime)
                 {
                     //1 means open, the third bit is on means the lock state is determined by time stamp
                     LockControl = 1 | 4;
@@ -441,14 +445,23 @@ int core0_main(void)
         /*3. send can message to the electric control module that indicate whether the lock should be open or on*/
         CAN_SendSingle(0x98354990, LockControl, 0);
         /*4. read usart port for message from the 4G module, fill in the struct backEndInfo zeng*/
+        getData();
         /*5. send the struct UploadMessage to the cloud according to the send value zeng*/
+        if ((uploadMessage.send & 0x01 == 1) || (uploadMessage.send & 0x02 == 1)) //发送CAN消息
+        {
+            canMsgSent();
+        }
+        else if (uploadMessage.send & 0x04 == 1) //发送锁状态
+        {
+            lockStateSend();
+        }
         /*6. compare AuthInfo and BackEndInfo, update AuthInfo and dflash if they are not equal*/
         int i = 0;
         for (; i < BufferLen; i++)
         {
-            if (authInfo[i].indentification != backEndInfo.authInfo[i].indentification ||
-                authInfo[i].startTime != backEndInfo.authInfo[i].startTime ||
-                authInfo[i].endTime != backEndInfo.authInfo[i].endTime)
+            if (authInfo[i].indentification != backEndInfo.authInfo[i].indentification
+                    || authInfo[i].startTime != backEndInfo.authInfo[i].startTime
+                    || authInfo[i].endTime != backEndInfo.authInfo[i].endTime)
             {
                 break;
             }
