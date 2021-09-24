@@ -257,8 +257,22 @@ void initNet (void)
 {
     char *netInitInfo[] = {"AT+QICLOSE=0","AT+QIDEACT=1","AT+QICSGP=1,1,\"CMNET\",\"\",\"\",1", "AT+QIACT=1",
             "AT+QIOPEN=1,0,\"TCP\",\"115.29.196.107\",6809,0,0",
-//                "AT+QISENDEX=0,\"7E0102000676890100562606E144454A544E506D7E\"",
+    //                "AT+QISENDEX=0,\"7E0102000676890100562606E144454A544E506D7E\"",
             };
+//    char s1[] = "AT+QICLOSE=0";
+//    char s2[] = "AT+QIDEACT=1";
+//    char s3[] = "AT+QICSGP=1,1,\"CMNET\",\"\",\"\",1";
+//    char s4[] = "AT+QIACT=1";
+//    char s5[] = "AT+QIOPEN=1,0,\"TCP\",\"115.29.196.107\",6809,0,0";
+//    uint8 *p1 = &s1[0];
+//    uint8 *p2 = &s2[0];
+//    uint8 *p3 = &s3[0];
+//    uint8 *p4 = &s4[0];
+//    uint8 *p5 = &s5[0];
+//    UART_PutStr(s1);
+//    delayMs(500);
+//    UART_PutStr(p2);
+//    delayMs(500);
     for (int i = 0; i < 5; i++)
     {
         UART_PutStr(netInitInfo[i]);

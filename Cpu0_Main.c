@@ -36,13 +36,9 @@
 #include "Multican/Can/IfxMultican_Can.h"
 #include "Flash_Programming.h"
 
-#include "Ifx_Types.h"
-#include "IfxCpu.h"
-#include "IfxScuWdt.h"
 #include "ASCLIN_UART.h"
 #include "stdio.h"
 #include "jtt808.h"
-#include "remoteLock.h"
 
 #include "SysSe/Bsp/Bsp.h"   //包含时钟相关，延迟函数在此实现
 
@@ -348,7 +344,7 @@ int core0_main (void)
     //the fourth bit is on if lock is determined by cloud command
     int LockControl = 0;
     int ret;
-    IfxCpu_enableInterrupts();
+
 
     /* !!WATCHDOG0 AND SAFETY WATCHDOG ARE DISABLED HERE!!
      * Enable the watchdogs and service them periodically if it is required
@@ -369,10 +365,13 @@ int core0_main (void)
     IfxPort_setPinLow(&MODULE_P33, 9);
 
     CanApp_init();
+    init_ASCLIN_UART(); /* Initialize the module                  */
 
     initNet(); //初始化4G模块
     dataReady(); //鉴权信息
-    getData(); //接收服务器下发消息，包括①服务器通用应答，②锁控制命令下发，③授权信息下发
+//    getData(); //接收服务器下发消息，包括①服务器通用应答，②锁控制命令下发，③授权信息下发
+
+    IfxCpu_enableInterrupts();
 
     /*can usart rte initialization, read from the flash to get the AuthInfo structure*/
 
@@ -395,6 +394,7 @@ int core0_main (void)
     }
     init_GPIOs();
     initOnsiteLock();
+
     while (1)
     {
 
